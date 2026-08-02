@@ -1515,7 +1515,9 @@ namespace SellMyShit
                                 ownedAmount,
                                 _pendingMarketRatio.MarketGetRate,
                                 _pendingMarketRatio.MarketGiveRate,
-                                Settings.ListingPricePercent.Value);
+                                Settings.UseReverseMarketRatio
+                                    ? 100
+                                    : Settings.ListingPricePercent.Value);
 
                         if (wantedValue <= 0)
                         {
@@ -2101,6 +2103,30 @@ namespace SellMyShit
             if (currencyExchangePanel == null)
             {
                 return null;
+            }
+
+            if (Settings.UseReverseMarketRatio)
+            {
+                var highestBuyOffer = currencyExchangePanel.OfferedItemStock?
+                    .Where(stock => stock.Give > 0 && stock.Get > 0 && stock.ListedCount > 0)
+                    .OrderByDescending(stock => stock.Get / (double)stock.Give)
+                    .FirstOrDefault();
+
+                if (highestBuyOffer == null)
+                {
+                    debugMessages.Add("No reverse market ratios were available.");
+                    return null;
+                }
+
+                debugMessages.Add(
+                    $"Using reverse market ratio: {highestBuyOffer.Get}:{highestBuyOffer.Give}");
+
+                return new MarketRatio
+                {
+                    MarketGetRate = highestBuyOffer.Get,
+                    MarketGiveRate = highestBuyOffer.Give,
+                    AvailableTrades = (int)highestBuyOffer.ListedCount
+                };
             }
 
             if (Settings.ListPriceBasedOnHighestCompetingTrade)

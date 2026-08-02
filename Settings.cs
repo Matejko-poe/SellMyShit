@@ -129,10 +129,19 @@ namespace SellMyShit
         public EmptyNode PricingGroup { get; set; } = new();
 
         [Menu(
+            "Use reverse market ratio (match highest buy offer)?",
+            "If enabled, the plugin lists at the highest price offered by buyers, " +
+            "using the reverse side of the market. Listing price percent is ignored.",
+            201,
+            PricingGroupId)]
+        public ToggleNode UseReverseMarketRatio { get; set; } = new(false);
+
+        [ConditionalDisplay(nameof(UseReverseMarketRatio), false)]
+        [Menu(
             "Listing price percent",
             "Percentage of the detected market ratio to request. " +
             "100 means the listing is priced at 100% of the market ratio.",
-            201,
+            202,
             PricingGroupId)]
         public RangeNode<int> ListingPricePercent { get; set; } =
             new(100, 1, 100);
@@ -141,13 +150,13 @@ namespace SellMyShit
         [Menu(
             "Use highest competing market ratio for listing price?",
             "If enabled, the plugin will use the market ratio of the competing trade to determine the listing price. The trades will usually take longer to complete, but the listing price will be more profitable",
-            202,
+            203,
             PricingGroupId)]
         public ToggleNode ListPriceBasedOnHighestCompetingTrade { get; set; } = new(false);
 
         [Menu("Only pick ratios with sufficient stock?",
             "If enabled, the plugin will only pick ratios that have enough stock to fulfill your request. Usually, the stock is sufficient, unless large amounts of currencies are being sold.",
-            203,
+            204,
             PricingGroupId)]
         public ToggleNode OnlyPickRatiosWithSufficientStock { get; set; } = new(true);
 
