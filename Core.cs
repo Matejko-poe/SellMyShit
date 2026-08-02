@@ -2118,12 +2118,16 @@ namespace SellMyShit
                 }
 
                 debugMessages.Add(
-                    $"Using reverse market ratio: {highestBuyOffer.Get}:{highestBuyOffer.Give}");
+                    $"Using reverse market ratio: {highestBuyOffer.Give}:{highestBuyOffer.Get}");
 
                 return new MarketRatio
                 {
-                    MarketGetRate = highestBuyOffer.Get,
-                    MarketGiveRate = highestBuyOffer.Give,
+                    // MarketWizardV2 represents the buy side as Get/Give and
+                    // calculates I WANT as offeredAmount / ratio. Store the
+                    // reciprocal here because CalculateWantedAmount expects
+                    // wanted/offered (MarketGetRate/MarketGiveRate).
+                    MarketGetRate = highestBuyOffer.Give,
+                    MarketGiveRate = highestBuyOffer.Get,
                     AvailableTrades = (int)highestBuyOffer.ListedCount
                 };
             }
