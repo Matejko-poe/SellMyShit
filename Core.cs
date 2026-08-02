@@ -1390,9 +1390,8 @@ namespace SellMyShit
 
                         var marketRatio = GetMarketRatioForPendingExchange(currencyExchangePanel);
 
-                        var marketRateGive = currencyExchangePanel.MarketRateGive;
-
-                        if (marketRatio.MarketGetRate <= 0 ||
+                        if (marketRatio == null ||
+                            marketRatio.MarketGetRate <= 0 ||
                             marketRatio.MarketGiveRate <= 0)
                         {
                             break;
