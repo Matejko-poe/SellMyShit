@@ -540,6 +540,9 @@ namespace SellMyShit
             _collectStartedUtc = DateTime.UtcNow;
             _collectClicks = 0;
             _collectClickedAddresses.Clear();
+            _collectLastKey = string.Empty;
+            _collectSameKeyClicks = 0;
+            _collectNextClickUtc = DateTime.MinValue;
 
             var panel = GetCurrencyExchangePanel();
 
@@ -582,6 +585,14 @@ namespace SellMyShit
                 LogRowTree(child, depth + 1);
         }
 
+        private DateTime _collectNextClickUtc = DateTime.MinValue;
+        private string _collectLastKey = string.Empty;
+        private int _collectSameKeyClicks;
+
+        // One click per pass: click the first non-empty item slot of the first completed row,
+        // wait a moment for the board to redraw, then look again. Rows move up and get new
+        // element addresses after every collect, so nothing is remembered about elements; a slot
+        // that does not clear after a few clicks stops the run instead of looping.
         private void ProcessCollectCompleted(CurrencyExchangePanel currencyExchangePanel)
         {
             if (!_collectRunning)
@@ -594,26 +605,24 @@ namespace SellMyShit
                 return;
             }
 
-            if (IsGameInputBusy())
+            if (IsGameInputBusy() || DateTime.UtcNow < _collectNextClickUtc)
                 return;
 
-            if ((DateTime.UtcNow - _collectStartedUtc).TotalSeconds > 15 ||
-                _collectClicks > 60)
+            if ((DateTime.UtcNow - _collectStartedUtc).TotalSeconds > 30 ||
+                _collectClicks > 80)
             {
                 _collectRunning = false;
                 return;
             }
 
-            var target = FindNextCollectTarget(
-                currencyExchangePanel,
-                _collectClickedAddresses);
+            var target = FindNextCollectTarget(currencyExchangePanel, out var key);
 
             if (target == null)
             {
                 if (_collectClicks == 0)
                 {
                     LogError(
-                        "Collect: no item slot found in the completed rows.");
+                        "Collect: nothing to collect (no completed row with items in its slots).");
 
                     var rows = CompletedOrderRows(currencyExchangePanel);
 
@@ -623,29 +632,51 @@ namespace SellMyShit
                             LogRowTree(row, 0);
                     }
                 }
+                else
+                {
+                    LogMessage($"Collect: done, {_collectClicks} click(s).");
+                }
 
                 _collectRunning = false;
                 return;
+            }
+
+            if (key == _collectLastKey)
+            {
+                if (++_collectSameKeyClicks > 3)
+                {
+                    LogError($"Collect: slot {key} did not clear after 3 clicks, stopping.");
+                    _collectRunning = false;
+                    return;
+                }
+            }
+            else
+            {
+                _collectLastKey = key;
+                _collectSameKeyClicks = 1;
             }
 
             if (QueueGameCtrlShiftRightClick(target.GetClientRect().Center))
             {
                 var rect = target.GetClientRect();
 
-                _collectClickedAddresses.Add(target.Address);
                 _collectClicks++;
+                _collectNextClickUtc = DateTime.UtcNow.AddMilliseconds(350);
 
                 LogMessage(
                     $"Collect: ctrl+shift+right-clicked slot " +
-                    $"{rect.Left},{rect.Top} {rect.Width}x{rect.Height} " +
-                    $"({target.Address}).");
+                    $"{rect.Left},{rect.Top} {rect.Width}x{rect.Height} (key {key}).");
             }
         }
 
+        // The collectable slots are on the right half of a completed row; the left half only
+        // describes the order. A slot whose amount label reads 0 is already empty.
         private static Element FindNextCollectTarget(
             CurrencyExchangePanel currencyExchangePanel,
-            HashSet<long> clicked)
+            out string key)
         {
+            key = string.Empty;
+
             var rows = CompletedOrderRows(currencyExchangePanel);
 
             if (rows == null)
@@ -653,10 +684,74 @@ namespace SellMyShit
 
             foreach (var row in rows)
             {
-                var item = FindItemElement(row, clicked);
+                var rowCenterX = row.GetClientRect().Center.X;
+                var slots = new List<Element>();
 
-                if (item != null)
-                    return item;
+                CollectItemSlots(row, slots);
+
+                foreach (var slot in slots.OrderBy(slot => slot.GetClientRect().Left))
+                {
+                    var rect = slot.GetClientRect();
+
+                    if (rect.Center.X <= rowCenterX)
+                        continue;
+
+                    var amount = GetSlotAmount(slot);
+
+                    if (amount == 0)
+                        continue;
+
+                    key = $"{rows.Count}:{(int)rect.Left},{(int)rect.Top}:{amount?.ToString() ?? "?"}";
+                    return slot;
+                }
+            }
+
+            return null;
+        }
+
+        private static void CollectItemSlots(Element element, List<Element> result, int depth = 0)
+        {
+            if (element == null || depth > 3)
+                return;
+
+            if (IsItemSlot(element))
+            {
+                result.Add(element);
+                return;
+            }
+
+            var children = element.Children;
+
+            if (children == null)
+                return;
+
+            foreach (var child in children)
+                CollectItemSlots(child, result, depth + 1);
+        }
+
+        // the stack size drawn on a slot, or null when the slot shows no number
+        private static int? GetSlotAmount(Element slot, int depth = 0)
+        {
+            var text = slot?.TextNoTags?.Trim();
+
+            if (!string.IsNullOrEmpty(text) &&
+                text.All(c => char.IsDigit(c) || c == ' ' || c == ',' || c == '.') &&
+                int.TryParse(
+                    new string(text.Where(char.IsDigit).ToArray()),
+                    out var amount))
+            {
+                return amount;
+            }
+
+            if (depth >= 2 || slot?.Children == null)
+                return null;
+
+            foreach (var child in slot.Children)
+            {
+                var value = GetSlotAmount(child, depth + 1);
+
+                if (value != null)
+                    return value;
             }
 
             return null;
@@ -723,30 +818,6 @@ namespace SellMyShit
                    rect.Height >= 60 &&
                    rect.Height <= 125 &&
                    Math.Abs(rect.Width - rect.Height) <= 6;
-        }
-
-        private static Element FindItemElement(Element element, HashSet<long> clicked, int depth = 0)
-        {
-            if (element == null || depth > 3)
-                return null;
-
-            if (!clicked.Contains(element.Address) && IsItemSlot(element))
-                return element;
-
-            var children = element.Children;
-
-            if (children == null)
-                return null;
-
-            foreach (var child in children)
-            {
-                var found = FindItemElement(child, clicked, depth + 1);
-
-                if (found != null)
-                    return found;
-            }
-
-            return null;
         }
 
         private IReadOnlyList<OwnedCurrency>
