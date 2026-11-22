@@ -99,6 +99,60 @@ namespace SellMyShit
 
         private int _displayItemsSourceVersion = -1;
         private string _displayItemsFilter = string.Empty;
+        private string _displayItemsCategory = string.Empty;
+
+        // categories as the in-game exchange picker lists them; the item's category is derived
+        // from its class and name, since the picker's own grouping is not exposed per item
+        private const string CategoryAll = "All";
+
+        private static readonly string[] Categories =
+        [
+            CategoryAll, "Currency", "Essences", "Delve", "Divination Cards",
+            "Delirium", "Legion", "Fragments", "Other"
+        ];
+
+        private string GetSelectedCategory()
+        {
+            var value = Settings?.SelectedCategory?.Value;
+
+            return Array.IndexOf(Categories, value) >= 0 ? value : CategoryAll;
+        }
+
+        private static string GetItemCategory(OwnedCurrency item)
+        {
+            var name = item?.Name ?? string.Empty;
+            var className = item?.ItemType?.ClassName ?? string.Empty;
+            var path = item?.ItemType?.Metadata ?? string.Empty;
+
+            bool Has(string text, string part) =>
+                text.Contains(part, StringComparison.OrdinalIgnoreCase);
+
+            if (Has(className, "Divination") || Has(path, "DivinationCard"))
+                return "Divination Cards";
+
+            if (Has(name, "Essence") || Has(path, "CurrencyEssence"))
+                return "Essences";
+
+            if (Has(name, "Timeless") || Has(path, "Legion"))
+                return "Legion";
+
+            if (Has(name, "Fossil") || Has(name, "Resonator") || Has(path, "Delve"))
+                return "Delve";
+
+            if (Has(name, "Delirium") || Has(name, "Simulacrum") || Has(path, "Delirium"))
+                return "Delirium";
+
+            if (Has(className, "Fragment") || Has(path, "MapFragment") ||
+                Has(name, "Splinter") || Has(name, "Scarab") || Has(name, "Breachstone"))
+            {
+                return "Fragments";
+            }
+
+            if (Has(className, "StackableCurrency") || Has(path, "Items/Currency"))
+                return "Currency";
+
+            return "Other";
+        }
         private int _displayItemsSortColumn = -1;
         private bool _displayItemsSortAscending;
         private bool _isAltKeyDown = false;
@@ -672,6 +726,10 @@ namespace SellMyShit
                 string.Equals(
                     _displayItemsFilter,
                     filter,
+                    StringComparison.Ordinal) &&
+                string.Equals(
+                    _displayItemsCategory,
+                    GetSelectedCategory(),
                     StringComparison.Ordinal);
 
             if (cacheIsCurrent)
@@ -679,10 +737,18 @@ namespace SellMyShit
 
             _displayItemsCache.Clear();
 
+            var category = GetSelectedCategory();
+
             foreach (var item in ownedItems)
             {
                 if (item == null)
                     continue;
+
+                if (category != CategoryAll &&
+                    GetItemCategory(item) != category)
+                {
+                    continue;
+                }
 
                 if (!string.IsNullOrWhiteSpace(filter) &&
                     GetItemSearchText(item).IndexOf(
@@ -708,6 +774,8 @@ namespace SellMyShit
 
             _displayItemsFilter =
                 filter;
+
+            _displayItemsCategory = category;
 
             _displayItemsSortColumn =
                 sortColumn;
@@ -928,6 +996,10 @@ namespace SellMyShit
 
             DrawWantedCurrencyPicker();
 
+            ImGui.SameLine();
+
+            DrawCategoryPicker();
+
             DrawUnloadedStashTabsWarning();
 
             ImGui.Separator();
@@ -1098,6 +1170,32 @@ namespace SellMyShit
             return WantedCurrencies.All.Contains(value)
                 ? value
                 : WantedCurrencies.Chaos;
+        }
+
+        private void DrawCategoryPicker()
+        {
+            var current = GetSelectedCategory();
+
+            ImGui.SetNextItemWidth(
+                ImGui.CalcTextSize("Divination Cards").X +
+                ImGui.GetStyle().FramePadding.X * 2 +
+                ImGui.GetFrameHeight());
+
+            if (!ImGui.BeginCombo("##category", current))
+            {
+                if (ImGui.IsItemHovered())
+                    ImGui.SetTooltip("Category to list");
+
+                return;
+            }
+
+            foreach (var option in Categories)
+            {
+                if (ImGui.Selectable(option, option == current))
+                    Settings.SelectedCategory.Value = option;
+            }
+
+            ImGui.EndCombo();
         }
 
         private void DrawWantedCurrencyPicker()
@@ -1423,6 +1521,13 @@ namespace SellMyShit
             ImGui.TableNextColumn();
 
             ImGui.TextUnformatted(name);
+
+            if (ImGui.IsItemHovered())
+            {
+                // handy to check how an item was categorised
+                ImGui.SetTooltip(
+                    $"Category: {GetItemCategory(item)}\nClass: {item.ItemType?.ClassName}");
+            }
 
             ImGui.TableNextColumn();
 

@@ -151,6 +151,10 @@ namespace SellMyShit
         [IgnoreMenu]
         public TextNode AttachDirection { get; set; } = new("Left");
 
+        // category shown in the owned items window (All, Currency, Essences, ...)
+        [IgnoreMenu]
+        public TextNode SelectedCategory { get; set; } = new("All");
+
         // remembered window geometry (0 / -1 = not saved yet)
         [IgnoreMenu]
         public RangeNode<int> SavedWindowWidth { get; set; } = new(0, 0, 10000);
