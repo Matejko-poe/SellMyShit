@@ -734,16 +734,29 @@ namespace SellMyShit
 
             // resizable and (when detached) freely movable; the size is remembered by ImGui and
             // starts from the configured width/height
+            // the remembered size/position win over the defaults every time the window appears
+            var savedWidth = Settings.SavedWindowWidth.Value;
+            var savedHeight = Settings.SavedWindowHeight.Value;
+
             ImGui.SetNextWindowSize(
-                new NumVector2(
-                    Settings.WindowWidth.Value + 24,
-                    Settings.WindowHeight.Value + 120),
-                ImGuiCond.FirstUseEver);
+                savedWidth > 0 && savedHeight > 0
+                    ? new NumVector2(savedWidth, savedHeight)
+                    : new NumVector2(
+                        Math.Max(Settings.WindowWidth.Value + 24, 560),
+                        Settings.WindowHeight.Value + 120),
+                ImGuiCond.Appearing);
 
             if (!Settings.AttachToExchangeWindow.Value)
             {
+                if (Settings.SavedWindowX.Value >= 0 && Settings.SavedWindowY.Value >= 0)
+                {
+                    ImGui.SetNextWindowPos(
+                        new NumVector2(Settings.SavedWindowX.Value, Settings.SavedWindowY.Value),
+                        ImGuiCond.Appearing);
+                }
+
                 ImGui.SetNextWindowSizeConstraints(
-                    new NumVector2(420, 220),
+                    new NumVector2(480, 220),
                     new NumVector2(float.MaxValue, float.MaxValue));
             }
 
@@ -756,6 +769,31 @@ namespace SellMyShit
             }
 
             _lastWindowSize = ImGui.GetWindowSize();
+
+            // remember what the user dragged/resized to, once the mouse is released
+            if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+            {
+                var size = ImGui.GetWindowSize();
+
+                if (Math.Abs(size.X - Settings.SavedWindowWidth.Value) >= 1 ||
+                    Math.Abs(size.Y - Settings.SavedWindowHeight.Value) >= 1)
+                {
+                    Settings.SavedWindowWidth.Value = (int)size.X;
+                    Settings.SavedWindowHeight.Value = (int)size.Y;
+                }
+
+                if (!Settings.AttachToExchangeWindow.Value)
+                {
+                    var pos = ImGui.GetWindowPos();
+
+                    if (Math.Abs(pos.X - Settings.SavedWindowX.Value) >= 1 ||
+                        Math.Abs(pos.Y - Settings.SavedWindowY.Value) >= 1)
+                    {
+                        Settings.SavedWindowX.Value = Math.Max(0, (int)pos.X);
+                        Settings.SavedWindowY.Value = Math.Max(0, (int)pos.Y);
+                    }
+                }
+            }
 
             if (Settings.AttachToExchangeWindow.Value &&
                 TryGetExchangePanelRect(out panelRect))
@@ -1133,7 +1171,7 @@ namespace SellMyShit
                 (int)Math.Max(maxHeight - chromeHeight, 80f));
 
             ImGui.SetNextWindowSizeConstraints(
-                new NumVector2(Math.Min(420f, maxWidth), 220),
+                new NumVector2(Math.Min(480f, maxWidth), 220),
                 new NumVector2(maxWidth, maxHeight));
         }
 
@@ -1284,7 +1322,7 @@ namespace SellMyShit
                 "Action",
                 ImGuiTableColumnFlags.WidthFixed |
                 ImGuiTableColumnFlags.NoSort,
-                110f);
+                160f);
 
             // ImGui erzeugt die klickbaren Header und Sortierpfeile.
             ImGui.TableHeadersRow();

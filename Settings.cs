@@ -120,6 +120,19 @@ namespace SellMyShit
         [IgnoreMenu]
         public TextNode AttachDirection { get; set; } = new("Left");
 
+        // remembered window geometry (0 / -1 = not saved yet)
+        [IgnoreMenu]
+        public RangeNode<int> SavedWindowWidth { get; set; } = new(0, 0, 10000);
+
+        [IgnoreMenu]
+        public RangeNode<int> SavedWindowHeight { get; set; } = new(0, 0, 10000);
+
+        [IgnoreMenu]
+        public RangeNode<int> SavedWindowX { get; set; } = new(-1, -1, 10000);
+
+        [IgnoreMenu]
+        public RangeNode<int> SavedWindowY { get; set; } = new(-1, -1, 10000);
+
         [Menu(
             "Show Debug Messages?",
             null,
