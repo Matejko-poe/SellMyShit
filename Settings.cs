@@ -189,6 +189,13 @@ namespace SellMyShit
             PricingGroupId)]
         public ToggleNode OnlyPickRatiosWithSufficientStock { get; set; } = new(true);
 
+        [Menu("Partial sell percent",
+            "Used by the \"90%\"-style buttons: lists only this percentage of the owned stack (rounded down, at least 1) and keeps the rest.",
+            205,
+            PricingGroupId)]
+        public RangeNode<int> StackSellPercent { get; set; } =
+            new(90, 1, 99);
+
         [Menu("Sell for",
             "Currency to ask for in return. Also switchable from the owned items window.",
             204,

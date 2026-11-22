@@ -355,7 +355,10 @@ namespace SellMyShit
         private int GetRemainingOfferCapacity() =>
             Math.Max(0, MaxTradeOffers - GetListedOfferCount());
 
-        private void StartBulkSell()
+        // share of each stack the current bulk run lists; 100 = everything
+        private int _bulkStackPercent = 100;
+
+        private void StartBulkSell(int stackPercent = 100)
         {
             if (_sellSequenceStep != SellSequenceStep.Idle)
                 return;
@@ -387,6 +390,7 @@ namespace SellMyShit
             }
 
             _selectedCurrencies.Clear();
+            _bulkStackPercent = stackPercent;
 
             LogMessage(
                 $"Bulk: queued {_bulkSellQueue.Count} item(s), " +
@@ -427,7 +431,7 @@ namespace SellMyShit
                 $"Bulk: starting {current.Name} " +
                 $"({_bulkSellQueue.Count} left).");
 
-            StartSellSequence(current);
+            StartSellSequence(current, _bulkStackPercent);
         }
 
         private void StartCollect()
@@ -852,6 +856,11 @@ namespace SellMyShit
 
             if (ImGui.SmallButton($"Sell selected ({selectedCount})"))
                 StartBulkSell();
+
+            ImGui.SameLine();
+
+            if (ImGui.SmallButton($"Sell selected {Settings.StackSellPercent.Value}%"))
+                StartBulkSell(Settings.StackSellPercent.Value);
 
             ImGui.EndDisabled();
 
@@ -1400,6 +1409,20 @@ namespace SellMyShit
 
             if (ImGui.SmallButton($"Sell##{index}"))
                 StartSellSequence(item);
+
+            ImGui.SameLine();
+
+            var partialPercent = Settings.StackSellPercent.Value;
+
+            if (ImGui.SmallButton($"{partialPercent}%##{index}"))
+                StartSellSequence(item, partialPercent);
+
+            if (ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(
+                    $"Sell {partialPercent}% of the stack " +
+                    $"({Math.Max(1, (int)Math.Floor(item.Owned * partialPercent / 100d))} of {item.Owned}), keep the rest.");
+            }
 
             ImGui.SameLine();
 
@@ -2740,7 +2763,8 @@ namespace SellMyShit
         }
 
         private void StartSellSequence(
-            OwnedCurrency item)
+            OwnedCurrency item,
+            int stackPercent = 100)
         {
             if (item == null)
                 return;
@@ -2786,7 +2810,10 @@ namespace SellMyShit
             // the picker row is looked up by name once the search results are showing
             _pendingSellItem = null;
             _pendingSellItemName = item.Name;
-            _pendingSellOwnedAmount = item.Owned;
+            // a partial sell lists only part of the stack and keeps the rest
+            _pendingSellOwnedAmount = stackPercent >= 100
+                ? item.Owned
+                : Math.Max(1, (int)Math.Floor(item.Owned * stackPercent / 100d));
 
             AddDebugMessage(
                 $"Started sell sequence for {_pendingSellItemName}, " +
