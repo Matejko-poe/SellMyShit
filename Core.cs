@@ -100,6 +100,7 @@ namespace SellMyShit
         private int _displayItemsSourceVersion = -1;
         private string _displayItemsFilter = string.Empty;
         private string _displayItemsCategory = string.Empty;
+        private bool _resetWindowSize;
 
         // categories as the in-game exchange picker lists them; the item's category is derived
         // from its class and name, since the picker's own grouping is not exposed per item
@@ -674,10 +675,12 @@ namespace SellMyShit
 
             var rect = element.GetClientRect();
 
+            // 72x72 at UI scale 1.0; at a scaled UI the slot is bigger (108x108 at 1.5), while
+            // the frame drawn inside it is larger still (135x135), so stop below that
             return rect.Width >= 60 &&
-                   rect.Width <= 100 &&
+                   rect.Width <= 125 &&
                    rect.Height >= 60 &&
-                   rect.Height <= 100 &&
+                   rect.Height <= 125 &&
                    Math.Abs(rect.Width - rect.Height) <= 6;
         }
 
@@ -806,13 +809,25 @@ namespace SellMyShit
             var savedWidth = Settings.SavedWindowWidth.Value;
             var savedHeight = Settings.SavedWindowHeight.Value;
 
-            ImGui.SetNextWindowSize(
-                savedWidth > 0 && savedHeight > 0
-                    ? new NumVector2(savedWidth, savedHeight)
-                    : new NumVector2(
-                        Math.Max(Settings.WindowWidth.Value + 24, 560),
-                        Settings.WindowHeight.Value + 120),
-                ImGuiCond.Appearing);
+            var defaultSize = new NumVector2(
+                Math.Min(Settings.WindowWidth.Value + 24, 520),
+                Settings.WindowHeight.Value + 120);
+
+            if (_resetWindowSize)
+            {
+                _resetWindowSize = false;
+                Settings.SavedWindowWidth.Value = 0;
+                Settings.SavedWindowHeight.Value = 0;
+                ImGui.SetNextWindowSize(defaultSize, ImGuiCond.Always);
+            }
+            else
+            {
+                ImGui.SetNextWindowSize(
+                    savedWidth > 0 && savedHeight > 0
+                        ? new NumVector2(savedWidth, savedHeight)
+                        : defaultSize,
+                    ImGuiCond.Appearing);
+            }
 
             if (!Settings.AttachToExchangeWindow.Value)
             {
@@ -824,7 +839,7 @@ namespace SellMyShit
                 }
 
                 ImGui.SetNextWindowSizeConstraints(
-                    new NumVector2(480, 220),
+                    new NumVector2(380, 200),
                     new NumVector2(float.MaxValue, float.MaxValue));
             }
 
@@ -869,43 +884,46 @@ namespace SellMyShit
                 ApplyAttachPosition(panelRect, _lastWindowSize);
             }
 
-            // width of the list itself, not the window: reading the window's content width here
-            // makes an auto-resizing window keep whatever width it happened to have last frame
-            var available = ImGui.GetContentRegionAvail().X;
+            // one flowing group of controls: a control that no longer fits the window width
+            // moves down to the next row instead of being clipped
             var attached = Settings.AttachToExchangeWindow.Value;
             var style = ImGui.GetStyle();
+            var firstInRow = true;
 
-            var buttonsWidth =
-                ImGui.CalcTextSize(attached ? "Detach" : "Attach").X +
-                style.FramePadding.X * 2 +
-                (attached
-                    ? ImGui.CalcTextSize($"Dir: {Settings.AttachDirection.Value}").X +
-                      style.FramePadding.X * 2 + style.ItemSpacing.X
-                    : 0f);
+            float ButtonWidth(string label) =>
+                ImGui.CalcTextSize(label).X + style.FramePadding.X * 2;
 
-            // when the window is squeezed the buttons drop to their own row instead of clipping
-            var narrow = available - buttonsWidth < 120f;
+            void Flow(float width)
+            {
+                if (!firstInRow)
+                {
+                    var rightEdge = ImGui.GetCursorScreenPos().X + ImGui.GetContentRegionAvail().X;
 
-            ImGui.SetNextItemWidth(
-                narrow
-                    ? available
-                    : Math.Max(120f, available - buttonsWidth - style.ItemSpacing.X));
+                    if (rightEdge - ImGui.GetItemRectMax().X >= width + style.ItemSpacing.X)
+                        ImGui.SameLine();
+                }
 
+                firstInRow = false;
+            }
+
+            Flow(160);
+            ImGui.SetNextItemWidth(160);
             DrawFilterControls();
 
-            if (!narrow)
-                ImGui.SameLine();
+            var attachLabel = attached ? "Detach" : "Attach";
+            Flow(ButtonWidth(attachLabel));
 
-            if (ImGui.SmallButton(attached ? "Detach" : "Attach"))
+            if (ImGui.SmallButton(attachLabel))
             {
                 Settings.AttachToExchangeWindow.Value = !attached;
             }
 
             if (attached)
             {
-                ImGui.SameLine();
+                var dirLabel = $"Dir: {Settings.AttachDirection.Value}";
+                Flow(ButtonWidth(dirLabel));
 
-                if (ImGui.SmallButton($"Dir: {Settings.AttachDirection.Value}"))
+                if (ImGui.SmallButton(dirLabel))
                 {
                     var index = Array.IndexOf(
                         AttachDirections,
@@ -916,88 +934,65 @@ namespace SellMyShit
                 }
             }
 
-            // one-click reverse ratio: price from the buyers' side, no tooltip hover needed
-            var reverse = Settings.UseReverseMarketRatio.Value;
+            Flow(ButtonWidth("Reset size"));
 
-            ImGui.PushStyleColor(
-                ImGuiCol.Button,
-                reverse
-                    ? new System.Numerics.Vector4(0.15f, 0.55f, 0.25f, 1f)
-                    : new System.Numerics.Vector4(0.30f, 0.30f, 0.30f, 1f));
-
-            if (ImGui.Button(reverse ? "Reverse ratio: ON" : "Reverse ratio: OFF"))
-                Settings.UseReverseMarketRatio.Value = !reverse;
-
-            ImGui.PopStyleColor();
+            if (ImGui.SmallButton("Reset size"))
+                _resetWindowSize = true;
 
             if (ImGui.IsItemHovered())
-            {
-                ImGui.SetTooltip(
-                    "ON: list at the highest buy offer (buyers' side of the book, read from the " +
-                    "panel, no hovering over Market Ratio). Listing price percent is ignored.\n" +
-                    "OFF: use the normal market ratio.");
-            }
-
-            ImGui.SameLine();
+                ImGui.SetTooltip("Back to the default window size");
 
             var filteredItems =
                 GetDisplayItems(ownedItems);
 
-            ImGui.Text(
-                $"Owned Items: {filteredItems.Count} / {ownedItems.Count}");
+            var countText = $"Owned Items: {filteredItems.Count} / {ownedItems.Count}";
+            Flow(ImGui.CalcTextSize(countText).X);
+            ImGui.TextUnformatted(countText);
 
             var capacity = GetRemainingOfferCapacity();
             var selectedCount = Math.Min(_selectedCurrencies.Count, capacity);
             var offersText =
                 $"offers {GetListedOfferCount()}/{MaxTradeOffers}";
 
-            var controlsWidth =
-                ImGui.CalcTextSize($"Sell selected ({selectedCount})").X +
-                ImGui.CalcTextSize("Clear").X +
-                ImGui.CalcTextSize(offersText).X +
-                ImGui.CalcTextSize("Collect").X +
-                style.FramePadding.X * 8 +
-                style.ItemSpacing.X * 4;
-
-            if (ImGui.GetContentRegionAvail().X >= controlsWidth)
-                ImGui.SameLine();
-
             ImGui.BeginDisabled(_selectedCurrencies.Count == 0 || capacity <= 0);
 
-            if (ImGui.SmallButton($"Sell selected ({selectedCount})"))
+            var sellSelectedLabel = $"Sell selected ({selectedCount})";
+            Flow(ButtonWidth(sellSelectedLabel));
+
+            if (ImGui.SmallButton(sellSelectedLabel))
                 StartBulkSell();
 
-            ImGui.SameLine();
+            var sellSelectedPartLabel = $"Sell selected {Settings.StackSellPercent.Value}%";
+            Flow(ButtonWidth(sellSelectedPartLabel));
 
-            if (ImGui.SmallButton($"Sell selected {Settings.StackSellPercent.Value}%"))
+            if (ImGui.SmallButton(sellSelectedPartLabel))
                 StartBulkSell(Settings.StackSellPercent.Value);
 
             ImGui.EndDisabled();
 
-            ImGui.SameLine();
+            Flow(ButtonWidth("Clear"));
 
             if (ImGui.SmallButton("Clear"))
                 _selectedCurrencies.Clear();
 
-            ImGui.SameLine();
-
+            Flow(ImGui.CalcTextSize(offersText).X);
             ImGui.TextDisabled(offersText);
 
-            ImGui.SameLine();
-
             ImGui.BeginDisabled(_collectRunning);
+
+            Flow(ButtonWidth("Collect"));
 
             if (ImGui.SmallButton("Collect"))
                 StartCollect();
 
             ImGui.EndDisabled();
 
-            ImGui.SameLine();
+            var comboExtra = style.FramePadding.X * 2 + ImGui.GetFrameHeight();
 
+            Flow(ImGui.CalcTextSize("Divine Orb").X + comboExtra);
             DrawWantedCurrencyPicker();
 
-            ImGui.SameLine();
-
+            Flow(ImGui.CalcTextSize("Divination Cards").X + comboExtra);
             DrawCategoryPicker();
 
             DrawUnloadedStashTabsWarning();
@@ -1269,7 +1264,7 @@ namespace SellMyShit
                 (int)Math.Max(maxHeight - chromeHeight, 80f));
 
             ImGui.SetNextWindowSizeConstraints(
-                new NumVector2(Math.Min(480f, maxWidth), 220),
+                new NumVector2(Math.Min(380f, maxWidth), 200),
                 new NumVector2(maxWidth, maxHeight));
         }
 
@@ -1359,6 +1354,7 @@ namespace SellMyShit
                 ImGuiTableFlags.RowBg |
                 ImGuiTableFlags.Resizable |
                 ImGuiTableFlags.Sortable |
+                ImGuiTableFlags.ScrollX |
                 ImGuiTableFlags.SizingStretchProp |
                 ImGuiTableFlags.NoSavedSettings;
 
