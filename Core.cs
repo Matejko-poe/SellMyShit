@@ -213,7 +213,11 @@ namespace SellMyShit
                 }
 
                 if (currencyExchangePanel?.IsVisible != true)
+                {
+                    // the next time the exchange opens, the game's counts are fresh again
+                    _listStaleAfterSale = false;
                     return;
+                }
 
                 ProcessSellSequence(currencyExchangePanel);
 
@@ -301,6 +305,18 @@ namespace SellMyShit
 
                 if (options == null)
                     return _currencyExchangeItemsCache;
+
+                // The closed picker keeps its old rows, with the owned counts from before the
+                // last sale. Rebuilding from them would bring a sold item back, so after a sale
+                // keep our own list until the picker is opened (fresh counts) or the exchange
+                // is closed.
+                if (_listStaleAfterSale)
+                {
+                    if (currencyPicker.IsVisible)
+                        _listStaleAfterSale = false;
+                    else
+                        return _currencyExchangeItemsCache;
+                }
 
                 // the game keeps the last search text in the picker, so after selling e.g. Abyss
                 // Thread the picker only lists that; a filtered list may only update the rows it
@@ -2933,8 +2949,12 @@ namespace SellMyShit
             }
         }
 
+        private bool _listStaleAfterSale;
+
         private void DeductSoldAmount(string name, int amount)
         {
+            _listStaleAfterSale = true;
+
             if (string.IsNullOrEmpty(name) ||
                 amount <= 0 ||
                 !_ownedCurrencies.TryGetValue(name, out var currency))
