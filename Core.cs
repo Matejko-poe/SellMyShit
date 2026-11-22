@@ -1423,8 +1423,9 @@ namespace SellMyShit
 
             if (ImGui.IsItemHovered())
             {
+                // SetTooltip takes a printf-style format, so a literal % must be doubled
                 ImGui.SetTooltip(
-                    $"Sell {partialPercent}% of the stack " +
+                    $"Sell {partialPercent}%% of the stack " +
                     $"({Math.Max(1, (int)Math.Floor(item.Owned * partialPercent / 100d))} of {item.Owned}), keep the rest.");
             }
 
@@ -3939,13 +3940,15 @@ namespace SellMyShit
                     ImGui.TableNextColumn();
 
                     var diffText = $"{(diff >= 0 ? "+" : string.Empty)}{diff} ({pct:+0.0;-0.0;0.0}%)";
-                    ImGui.TextColored(
+                    ImGui.PushStyleColor(
+                        ImGuiCol.Text,
                         diff > 0
                             ? new System.Numerics.Vector4(0.3f, 1f, 0.4f, 1f)
                             : diff < 0
                                 ? new System.Numerics.Vector4(1f, 0.4f, 0.4f, 1f)
-                                : new System.Numerics.Vector4(0.8f, 0.8f, 0.8f, 1f),
-                        diffText);
+                                : new System.Numerics.Vector4(0.8f, 0.8f, 0.8f, 1f));
+                    ImGui.TextUnformatted(diffText);
+                    ImGui.PopStyleColor();
 
                     report.AppendLine(
                         $"{name} | {owned} | {snap.NormalRate:0.####} | {snap.ReverseRate:0.####} | " +
@@ -3982,7 +3985,7 @@ namespace SellMyShit
 
             ImGui.SameLine();
             ImGui.TextDisabled(
-                "Normal = panel Market Ratio x Listing price %. Reverse = highest buy offer. " +
+                "Normal = panel Market Ratio x Listing price %%. Reverse = highest buy offer. " +
                 "Positive diff = reverse earns more.");
         }
 
