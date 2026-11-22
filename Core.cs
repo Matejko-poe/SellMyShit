@@ -214,16 +214,7 @@ namespace SellMyShit
 
                 if (currencyExchangePanel?.IsVisible != true)
                 {
-                    // the next time the exchange opens, the game's counts are fresh again, so
-                    // start from its picker instead of the list kept from this visit
-                    if (_ownedCurrencies.Count > 0)
-                    {
-                        _ownedCurrencies.Clear();
-                        _currencyExchangeItemsCache = [];
-                        _currencyExchangeItemsCacheInitialized = false;
-                        _currencyItemsVersion++;
-                    }
-
+                    // keep the list between visits: it is only changed again by an open picker
                     _listStaleAfterSale = false;
                     return;
                 }
@@ -388,12 +379,15 @@ namespace SellMyShit
                 if (!isFiltered)
                     _ownedCurrencies.Clear();
 
+                // The picker only fills in the owned count of rows it has drawn, and a search
+                // hides the rest, so "0 owned" often just means "not drawn". Dropping those rows
+                // is what emptied the list after the first listing. A zero never removes an
+                // entry; sold amounts are taken off by DeductSoldAmount, and an unfiltered
+                // rebuild (picker opened, search empty) starts from a clean list anyway.
                 foreach (var currency in seen.Values)
                 {
                     if (currency.Owned > 0)
                         _ownedCurrencies[currency.Name] = currency;
-                    else
-                        _ownedCurrencies.Remove(currency.Name);
                 }
 
                 _currencyExchangeItemsCache = _ownedCurrencies.Values
