@@ -669,8 +669,8 @@ namespace SellMyShit
             }
         }
 
-        // The collectable slots are on the right half of a completed row; the left half only
-        // describes the order. A slot whose amount label reads 0 is already empty.
+        // A completed row has two slots, "Buying" and "Selling", each with its amount drawn on it
+        // (rows sit in two columns on the board). A slot whose amount reads 0 is already empty.
         private static Element FindNextCollectTarget(
             CurrencyExchangePanel currencyExchangePanel,
             out string key)
@@ -684,7 +684,6 @@ namespace SellMyShit
 
             foreach (var row in rows)
             {
-                var rowCenterX = row.GetClientRect().Center.X;
                 var slots = new List<Element>();
 
                 CollectItemSlots(row, slots);
@@ -692,9 +691,6 @@ namespace SellMyShit
                 foreach (var slot in slots.OrderBy(slot => slot.GetClientRect().Left))
                 {
                     var rect = slot.GetClientRect();
-
-                    if (rect.Center.X <= rowCenterX)
-                        continue;
 
                     var amount = GetSlotAmount(slot);
 
