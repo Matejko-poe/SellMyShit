@@ -177,7 +177,7 @@ namespace SellMyShit
             "Prices the listing from the buyers' side of the order book (read straight from the panel, no tooltip hover needed). Listing price percent is ignored. Also switchable with one button in the owned items window.",
             200,
             PricingGroupId)]
-        public ToggleNode UseReverseMarketRatio { get; set; } = new(false);
+        public ToggleNode UseReverseMarketRatio { get; set; } = new(true);
 
         [Menu(
             "Listing price percent",
