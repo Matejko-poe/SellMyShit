@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Linq;
@@ -8,7 +8,6 @@ using ExileCore;
 using ExileCore.Shared.Attributes;
 using ExileCore.Shared.Interfaces;
 using ExileCore.Shared.Nodes;
-using ImGuiNET;
 using Newtonsoft.Json;
 
 namespace SellMyShit
@@ -48,9 +47,12 @@ namespace SellMyShit
                 {
                     SortOptions.Name,
                     SortOptions.Value,
-                    SortOptions.Owned
+                    SortOptions.Owned,
+                    SortOptions.Each
                 });
 
+
+            WantedCurrency.SetListValues(WantedCurrencies.All.ToList());
 
             ExcludedCurrenciesEditor = new CustomNode
             {
@@ -111,12 +113,41 @@ namespace SellMyShit
             InterfaceGroupId)]
         public ToggleNode SortAscending { get; set; } = new(false);
 
+        // flipped by the Attach/Detach button in the owned items window, so it stays out of the menu
+        [IgnoreMenu]
+        public ToggleNode AttachToExchangeWindow { get; set; } = new(true);
+
+        [IgnoreMenu]
+        public TextNode AttachDirection { get; set; } = new("Left");
+
         [Menu(
             "Show Debug Messages?",
             null,
             106,
             InterfaceGroupId)]
         public ToggleNode Debug { get; set; } = new(false);
+
+        [Menu(
+            "Test-Run?",
+            "Enable this, if you want to check wether the prices are put in correctly without actually clicking the sell button.",
+            107,
+            InterfaceGroupId)]
+        public ToggleNode TestRun { get; set; } = new(false);
+
+        // Missing from porkie02's upload (6989b48) although Core.cs reads them; added locally.
+        [Menu(
+            "Warn about unopened special stash tabs?",
+            "The exchange only counts items in stash tabs opened since your last zone change. Special tabs (Delve, Essence, Blight, ...) only load when opened. If enabled, the owned items window lists the special tabs not opened yet.",
+            108,
+            InterfaceGroupId)]
+        public ToggleNode CheckSpecialStashTabs { get; set; } = new(true);
+
+        [Menu(
+            "Extra stash tabs to check",
+            "Comma-separated stash tab names to also warn about when they were not opened since your last zone change.",
+            109,
+            InterfaceGroupId)]
+        public TextNode ExtraStashTabsToCheck { get; set; } = new("");
 
         // ─────────────────────────────────────────────
         // Pricing
@@ -129,19 +160,17 @@ namespace SellMyShit
         public EmptyNode PricingGroup { get; set; } = new();
 
         [Menu(
-            "Use reverse market ratio (match highest buy offer)?",
-            "If enabled, the plugin lists at the highest price offered by buyers, " +
-            "using the reverse side of the market. Listing price percent is ignored.",
-            201,
+            "Reverse ratio (match highest buy offer)?",
+            "Prices the listing from the buyers' side of the order book (read straight from the panel, no tooltip hover needed). Listing price percent is ignored. Also switchable with one button in the owned items window.",
+            200,
             PricingGroupId)]
         public ToggleNode UseReverseMarketRatio { get; set; } = new(false);
 
-        [ConditionalDisplay(nameof(UseReverseMarketRatio), false)]
         [Menu(
             "Listing price percent",
             "Percentage of the detected market ratio to request. " +
             "100 means the listing is priced at 100% of the market ratio.",
-            202,
+            201,
             PricingGroupId)]
         public RangeNode<int> ListingPricePercent { get; set; } =
             new(100, 1, 100);
@@ -150,15 +179,24 @@ namespace SellMyShit
         [Menu(
             "Use highest competing market ratio for listing price?",
             "If enabled, the plugin will use the market ratio of the competing trade to determine the listing price. The trades will usually take longer to complete, but the listing price will be more profitable",
-            203,
+            202,
             PricingGroupId)]
         public ToggleNode ListPriceBasedOnHighestCompetingTrade { get; set; } = new(false);
 
         [Menu("Only pick ratios with sufficient stock?",
             "If enabled, the plugin will only pick ratios that have enough stock to fulfill your request. Usually, the stock is sufficient, unless large amounts of currencies are being sold.",
-            204,
+            203,
             PricingGroupId)]
         public ToggleNode OnlyPickRatiosWithSufficientStock { get; set; } = new(true);
+
+        [Menu("Sell for",
+            "Currency to ask for in return. Also switchable from the owned items window.",
+            204,
+            PricingGroupId)]
+        public ListNode WantedCurrency { get; set; } = new()
+        {
+            Value = WantedCurrencies.Chaos
+        };
 
 
         // ─────────────────────────────────────────────
@@ -374,6 +412,31 @@ namespace SellMyShit
                     StringComparison.OrdinalIgnoreCase));
         }
 
+        /// <summary>Adds a currency to the excluded list the settings editor uses.</summary>
+        public void AddExcludedCurrency(string currencyName)
+        {
+            if (string.IsNullOrWhiteSpace(currencyName))
+                return;
+
+            var name = currencyName.Trim();
+            var list = new List<string>(GetExcludedCurrencies());
+
+            if (list.Any(excluded => string.Equals(
+                    excluded,
+                    name,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            list.Add(name);
+            list = list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+            _excludedCurrencies = list;
+            ExcludedCurrenciesJson.Value = JsonConvert.SerializeObject(list);
+            _loadedExcludedCurrenciesJson = ExcludedCurrenciesJson.Value;
+        }
+
         private void DrawExcludedCurrenciesEditor()
         {
             var excludedCurrencies = GetExcludedCurrencies();
@@ -540,11 +603,20 @@ namespace SellMyShit
 
     }
 
+    public static class WantedCurrencies
+    {
+        public const string Chaos = "Chaos Orb";
+        public const string Divine = "Divine Orb";
+
+        public static readonly string[] All = [Chaos, Divine];
+    }
+
     public static class SortOptions
     {
         public const string Name = "Name";
         public const string Value = "Value";
         public const string Owned = "Owned";
+        public const string Each = "Each";
     }
 
 }
