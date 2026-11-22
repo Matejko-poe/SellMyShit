@@ -20,6 +20,7 @@ namespace SellMyShit
         private const int InputTimingGroupId = 400;
         private const int CompatibilityGroupId = 500;
         private const int ExcludedCurrenciesGroupId = 600;
+        private const int LedgerGroupId = 700;
 
         private static readonly List<string> DefaultExcludedCurrencies =
         [
@@ -58,7 +59,37 @@ namespace SellMyShit
             {
                 DrawDelegate = DrawExcludedCurrenciesEditor
             };
+
+            SalesLedgerView = new CustomNode
+            {
+                DrawDelegate = SalesLedger.Draw
+            };
         }
+
+        // ─────────────────────────────────────────────
+        // Sales ledger
+        // ─────────────────────────────────────────────
+
+        [Menu(
+            "Sales ledger",
+            "A book of the ratios you listed at, to compare with earlier sales of the same item.",
+            LedgerGroupId)]
+        public EmptyNode LedgerGroup { get; set; } = new();
+
+        [Menu(
+            "Record sales in the ledger?",
+            "Every listing the plugin places (not Test-Run) is saved with its ratio to sales_ledger.json in the plugin folder.",
+            701,
+            LedgerGroupId)]
+        public ToggleNode RecordSales { get; set; } = new(true);
+
+        [Newtonsoft.Json.JsonIgnore]
+        [Menu(
+            "Ledger",
+            "Last and previous ratio per item, and how it changed.",
+            702,
+            LedgerGroupId)]
+        public CustomNode SalesLedgerView { get; }
 
         public ToggleNode Enable { get; set; } = new(true);
 

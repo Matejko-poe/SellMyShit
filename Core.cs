@@ -110,6 +110,8 @@ namespace SellMyShit
 
         public override bool Initialise()
         {
+            SalesLedger.Init(DirectoryFullName);
+
             // these two came later than the settings file, so an older save can still hold nulls
             if (Settings != null)
             {
@@ -2731,6 +2733,22 @@ namespace SellMyShit
                             DeductSoldAmount(
                                 itemName,
                                 _plannedOfferAmount > 0 ? _plannedOfferAmount : ownedAmount);
+
+                            if (Settings.RecordSales.Value &&
+                                _plannedOfferAmount > 0 &&
+                                _plannedWantAmount > 0)
+                            {
+                                SalesLedger.Add(new SaleRecord
+                                {
+                                    TimeUtc = DateTime.UtcNow,
+                                    Item = itemName,
+                                    WantedCurrency = WantedCurrencyName,
+                                    Offered = _plannedOfferAmount,
+                                    Wanted = _plannedWantAmount,
+                                    Rate = _plannedWantAmount / (double)_plannedOfferAmount,
+                                    Reverse = Settings.UseReverseMarketRatio.Value
+                                });
+                            }
 
                             SetSellSequenceStep(
                                 SellSequenceStep.CheckUnfavorableTrade);
