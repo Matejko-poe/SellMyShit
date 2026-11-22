@@ -360,6 +360,15 @@ namespace SellMyShit
                 if (seen.Count == 0)
                     return _currencyExchangeItemsCache;
 
+                // a closed picker that was not filled in yet lists every row with 0 owned;
+                // that is "no data", not "everything sold", so keep the list we have
+                if (!currencyPicker.IsVisible &&
+                    _currencyExchangeItemsCacheInitialized &&
+                    !seen.Values.Any(currency => currency.Owned > 0))
+                {
+                    return _currencyExchangeItemsCache;
+                }
+
                 if (!isFiltered)
                     _ownedCurrencies.Clear();
 
