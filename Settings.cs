@@ -196,6 +196,12 @@ namespace SellMyShit
         public RangeNode<int> StackSellPercent { get; set; } =
             new(90, 1, 99);
 
+        [Menu("Reopen \"I have\" list after a sale?",
+            "Off (default): after listing, the plugin stays on the exchange board and removes the sold amount from its list itself. On: it clicks \"I have\" again to refresh the owned counts from the game, which leaves the item picker open.",
+            206,
+            PricingGroupId)]
+        public ToggleNode ReopenPickerAfterSale { get; set; } = new(false);
+
         [Menu("Sell for",
             "Currency to ask for in return. Also switchable from the owned items window.",
             204,

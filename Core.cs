@@ -285,6 +285,10 @@ namespace SellMyShit
                     };
                 }
 
+                // a closed picker lists nothing; keep what we have instead of wiping the list
+                if (seen.Count == 0)
+                    return _currencyExchangeItemsCache;
+
                 if (!isFiltered)
                     _ownedCurrencies.Clear();
 
@@ -2684,6 +2688,13 @@ namespace SellMyShit
                                 $"Sell sequence completed for " +
                                 $"{ownedAmount} of {itemName}.");
 
+                            // the picker is not reopened after the sale, so take the listed
+                            // amount off the list ourselves; it is corrected the next time the
+                            // picker opens
+                            DeductSoldAmount(
+                                itemName,
+                                _plannedOfferAmount > 0 ? _plannedOfferAmount : ownedAmount);
+
                             SetSellSequenceStep(
                                 SellSequenceStep.CheckUnfavorableTrade);
                         }
@@ -2695,8 +2706,12 @@ namespace SellMyShit
                     {
                         //Check unfavorable trade window here...
 
+                        // by default stay on the exchange board; reopening "I have" only
+                        // refreshes the owned counts and leaves the picker open
                         SetSellSequenceStep(
-                            SellSequenceStep.ReopenIHave);
+                            Settings.ReopenPickerAfterSale
+                                ? SellSequenceStep.ReopenIHave
+                                : SellSequenceStep.End);
 
                         break;
                     }
@@ -2760,6 +2775,27 @@ namespace SellMyShit
                         break;
                     }
             }
+        }
+
+        private void DeductSoldAmount(string name, int amount)
+        {
+            if (string.IsNullOrEmpty(name) ||
+                amount <= 0 ||
+                !_ownedCurrencies.TryGetValue(name, out var currency))
+            {
+                return;
+            }
+
+            currency.Owned -= amount;
+
+            if (currency.Owned <= 0)
+                _ownedCurrencies.Remove(name);
+
+            _currencyExchangeItemsCache = _ownedCurrencies.Values
+                .Where(entry => !Settings.IsCurrencyExcluded(entry.Name))
+                .ToList();
+
+            _currencyItemsVersion++;
         }
 
         private void StartSellSequence(
