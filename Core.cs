@@ -602,7 +602,7 @@ namespace SellMyShit
             if (IsGameInputBusy() || DateTime.UtcNow < _collectNextClickUtc)
                 return;
 
-            if ((DateTime.UtcNow - _collectStartedUtc).TotalSeconds > 30 ||
+            if ((DateTime.UtcNow - _collectStartedUtc).TotalSeconds > 120 ||
                 _collectClicks > 80)
             {
                 _collectRunning = false;
@@ -655,7 +655,9 @@ namespace SellMyShit
                 var rect = target.GetClientRect();
 
                 _collectClicks++;
-                _collectNextClickUtc = DateTime.UtcNow.AddMilliseconds(350);
+                // the exchange rate-limits requests ("too many requests in a short time"),
+                // so collect slowly, with some jitter
+                _collectNextClickUtc = DateTime.UtcNow.AddMilliseconds(1800 + Random.Shared.Next(0, 700));
 
                 LogMessage(
                     $"Collect: ctrl+shift+right-clicked slot " +
