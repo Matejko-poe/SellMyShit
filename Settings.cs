@@ -169,7 +169,7 @@ namespace SellMyShit
         [Menu(
             "Listing price percent",
             "Percentage of the detected market ratio to request. " +
-            "100 means the listing is priced at 100% of the market ratio.",
+            "100 means the listing is priced at 100 percent of the market ratio.",
             201,
             PricingGroupId)]
         public RangeNode<int> ListingPricePercent { get; set; } =
@@ -190,7 +190,7 @@ namespace SellMyShit
         public ToggleNode OnlyPickRatiosWithSufficientStock { get; set; } = new(true);
 
         [Menu("Partial sell percent",
-            "Used by the \"90%\"-style buttons: lists only this percentage of the owned stack (rounded down, at least 1) and keeps the rest.",
+            "Used by the partial-sell buttons (90 by default): lists only this percentage of the owned stack (rounded down, at least 1) and keeps the rest.",
             205,
             PricingGroupId)]
         public RangeNode<int> StackSellPercent { get; set; } =
