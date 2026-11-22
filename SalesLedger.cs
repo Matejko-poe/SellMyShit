@@ -23,8 +23,8 @@ namespace SellMyShit
     }
 
     // A simple book of what was listed and at which ratio, kept in sales_ledger.json next to the
-    // plugin. Shown in the plugin settings, with the change against the previous sale of the
-    // same item.
+    // plugin. Shown in the plugin settings inside a collapsible panel; hovering a row shows the
+    // history of that item.
     public static class SalesLedger
     {
         private static readonly object Sync = new();
@@ -32,6 +32,10 @@ namespace SellMyShit
         private static string _path;
         private static string _filter = string.Empty;
         private static bool _confirmClear;
+
+        private static readonly NumVector4 Green = new(0.3f, 1f, 0.4f, 1f);
+        private static readonly NumVector4 Red = new(1f, 0.4f, 0.4f, 1f);
+        private static readonly NumVector4 Grey = new(0.8f, 0.8f, 0.8f, 1f);
 
         public static void Init(string directory)
         {
@@ -82,6 +86,37 @@ namespace SellMyShit
         private static string FormatRate(double rate) =>
             rate.ToString(rate >= 100 ? "0" : rate >= 1 ? "0.##" : "0.####", CultureInfo.InvariantCulture);
 
+        private static string ShortCurrency(string name) =>
+            string.Equals(name, WantedCurrencies.Divine, StringComparison.OrdinalIgnoreCase) ? "div"
+            : string.Equals(name, WantedCurrencies.Chaos, StringComparison.OrdinalIgnoreCase) ? "c"
+            : name;
+
+        // percent change from `from` to `to`, or null when it cannot be compared
+        private static double? Change(SaleRecord from, SaleRecord to)
+        {
+            if (from == null ||
+                to == null ||
+                from.Rate <= 0 ||
+                !string.Equals(from.WantedCurrency, to.WantedCurrency, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            return (to.Rate - from.Rate) / from.Rate * 100d;
+        }
+
+        private static NumVector4 ChangeColor(double change) =>
+            change > 0.05 ? Green : change < -0.05 ? Red : Grey;
+
+        // TextUnformatted everywhere: the text may hold a %, which printf-style ImGui calls
+        // would turn into garbage
+        private static void ColoredText(string text, NumVector4 color)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, color);
+            ImGui.TextUnformatted(text);
+            ImGui.PopStyleColor();
+        }
+
         public static void Draw()
         {
             SaleRecord[] all;
@@ -89,9 +124,11 @@ namespace SellMyShit
             lock (Sync)
                 all = _records.ToArray();
 
-            ImGui.TextDisabled(
-                $"{all.Length} sale(s) recorded in sales_ledger.json. " +
-                "Rate = wanted currency per item.");
+            // the whole ledger sits behind this header, closed by default
+            if (!ImGui.CollapsingHeader($"Sales history ({all.Length})###SalesHistoryHeader"))
+                return;
+
+            ImGui.TextDisabled("Hover a row for the full history of that item. Rate = wanted currency per item.");
 
             ImGui.SetNextItemWidth(220);
             ImGui.InputTextWithHint("##LedgerFilter", "Filter by item", ref _filter, 128);
@@ -137,13 +174,13 @@ namespace SellMyShit
 
             if (!ImGui.BeginTable(
                     "SalesLedgerTable",
-                    6,
+                    7,
                     ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
             {
                 return;
             }
 
-            foreach (var header in new[] { "Item", "Last rate", "Previous", "Change", "Sales", "Last sold" })
+            foreach (var header in new[] { "Item", "Last rate", "Previous", "Change", "Best", "Sales", "Last sold" })
                 ImGui.TableSetupColumn(header);
 
             ImGui.TableHeadersRow();
@@ -153,10 +190,24 @@ namespace SellMyShit
                 var history = group.OrderBy(record => record.TimeUtc).ToList();
                 var last = history[^1];
                 var previous = history.Count > 1 ? history[^2] : null;
+                var change = Change(previous, last);
+
+                // best rate among sales for the same currency as the last one
+                var best = history
+                    .Where(record => string.Equals(record.WantedCurrency, last.WantedCurrency, StringComparison.OrdinalIgnoreCase))
+                    .Max(record => record.Rate);
 
                 ImGui.TableNextRow();
                 ImGui.TableNextColumn();
-                ImGui.TextUnformatted(group.Key);
+
+                // a selectable over the whole row, so hovering anywhere in it shows the tooltip
+                ImGui.Selectable(
+                    $"{group.Key}##ledger_{group.Key}",
+                    false,
+                    ImGuiSelectableFlags.SpanAllColumns);
+
+                if (ImGui.IsItemHovered())
+                    DrawItemHistoryTooltip(group.Key, history);
 
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted($"{FormatRate(last.Rate)} {ShortCurrency(last.WantedCurrency)}");
@@ -164,39 +215,19 @@ namespace SellMyShit
                 ImGui.TableNextColumn();
 
                 if (previous == null)
-                {
                     ImGui.TextDisabled("-");
-                }
                 else
-                {
                     ImGui.TextUnformatted($"{FormatRate(previous.Rate)} {ShortCurrency(previous.WantedCurrency)}");
-                }
 
                 ImGui.TableNextColumn();
 
-                // a ratio only compares between sales for the same currency
-                if (previous == null ||
-                    previous.Rate <= 0 ||
-                    !string.Equals(previous.WantedCurrency, last.WantedCurrency, StringComparison.OrdinalIgnoreCase))
-                {
+                if (change == null)
                     ImGui.TextDisabled("-");
-                }
                 else
-                {
-                    var change = (last.Rate - previous.Rate) / previous.Rate * 100d;
+                    ColoredText($"{change.Value:+0.0;-0.0;0.0}%", ChangeColor(change.Value));
 
-                    ImGui.PushStyleColor(
-                        ImGuiCol.Text,
-                        change > 0.05
-                            ? new NumVector4(0.3f, 1f, 0.4f, 1f)
-                            : change < -0.05
-                                ? new NumVector4(1f, 0.4f, 0.4f, 1f)
-                                : new NumVector4(0.8f, 0.8f, 0.8f, 1f));
-
-                    // TextUnformatted: a % in a printf-style call would print garbage
-                    ImGui.TextUnformatted($"{change:+0.0;-0.0;0.0}%");
-                    ImGui.PopStyleColor();
-                }
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted($"{FormatRate(best)} {ShortCurrency(last.WantedCurrency)}");
 
                 ImGui.TableNextColumn();
                 ImGui.TextUnformatted(history.Count.ToString(CultureInfo.InvariantCulture));
@@ -207,30 +238,64 @@ namespace SellMyShit
             }
 
             ImGui.EndTable();
-
-            ImGui.Spacing();
-            ImGui.TextDisabled("History per item (newest first):");
-
-            foreach (var group in groups)
-            {
-                if (!ImGui.TreeNode($"{group.Key}##ledger_{group.Key}"))
-                    continue;
-
-                foreach (var record in group.OrderByDescending(record => record.TimeUtc).Take(30))
-                {
-                    ImGui.TextUnformatted(
-                        $"{record.TimeUtc.ToLocalTime():yyyy-MM-dd HH:mm}  " +
-                        $"{record.Offered} -> {record.Wanted} {ShortCurrency(record.WantedCurrency)}  " +
-                        $"(rate {FormatRate(record.Rate)}{(record.Reverse ? ", reverse" : string.Empty)})");
-                }
-
-                ImGui.TreePop();
-            }
         }
 
-        private static string ShortCurrency(string name) =>
-            string.Equals(name, WantedCurrencies.Divine, StringComparison.OrdinalIgnoreCase) ? "div"
-            : string.Equals(name, WantedCurrencies.Chaos, StringComparison.OrdinalIgnoreCase) ? "c"
-            : name;
+        private static void DrawItemHistoryTooltip(string item, List<SaleRecord> history)
+        {
+            ImGui.BeginTooltip();
+
+            ImGui.TextUnformatted(item);
+            ImGui.Separator();
+
+            var last = history[^1];
+            var sameCurrency = history
+                .Where(record => string.Equals(record.WantedCurrency, last.WantedCurrency, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (sameCurrency.Count > 1)
+            {
+                var avg = sameCurrency.Average(record => record.Rate);
+                var min = sameCurrency.Min(record => record.Rate);
+                var max = sameCurrency.Max(record => record.Rate);
+                var overall = Change(sameCurrency[0], sameCurrency[^1]);
+
+                ImGui.TextUnformatted(
+                    $"{sameCurrency.Count} sales   avg {FormatRate(avg)}   min {FormatRate(min)}   max {FormatRate(max)} {ShortCurrency(last.WantedCurrency)}");
+
+                if (overall != null)
+                {
+                    ImGui.TextUnformatted("Since the first sale:");
+                    ImGui.SameLine();
+                    ColoredText($"{overall.Value:+0.0;-0.0;0.0}%", ChangeColor(overall.Value));
+                }
+
+                ImGui.Separator();
+            }
+
+            // newest first, each with its change against the sale before it
+            var shown = 0;
+
+            for (var i = history.Count - 1; i >= 0 && shown < 15; i--, shown++)
+            {
+                var record = history[i];
+                var change = i > 0 ? Change(history[i - 1], record) : null;
+
+                ImGui.TextUnformatted(
+                    $"{record.TimeUtc.ToLocalTime():yyyy-MM-dd HH:mm}   " +
+                    $"{record.Offered} -> {record.Wanted} {ShortCurrency(record.WantedCurrency)}   " +
+                    $"rate {FormatRate(record.Rate)}{(record.Reverse ? " (reverse)" : string.Empty)}");
+
+                if (change != null)
+                {
+                    ImGui.SameLine();
+                    ColoredText($"{change.Value:+0.0;-0.0;0.0}%", ChangeColor(change.Value));
+                }
+            }
+
+            if (history.Count > shown)
+                ImGui.TextDisabled($"... and {history.Count - shown} older");
+
+            ImGui.EndTooltip();
+        }
     }
 }

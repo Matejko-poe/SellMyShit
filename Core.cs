@@ -214,7 +214,16 @@ namespace SellMyShit
 
                 if (currencyExchangePanel?.IsVisible != true)
                 {
-                    // the next time the exchange opens, the game's counts are fresh again
+                    // the next time the exchange opens, the game's counts are fresh again, so
+                    // start from its picker instead of the list kept from this visit
+                    if (_ownedCurrencies.Count > 0)
+                    {
+                        _ownedCurrencies.Clear();
+                        _currencyExchangeItemsCache = [];
+                        _currencyExchangeItemsCacheInitialized = false;
+                        _currencyItemsVersion++;
+                    }
+
                     _listStaleAfterSale = false;
                     return;
                 }
@@ -317,6 +326,13 @@ namespace SellMyShit
                     else
                         return _currencyExchangeItemsCache;
                 }
+
+                // Once there is a list, only an open picker (fresh counts from the game) may
+                // change it. A closed picker keeps rows with old or zero counts, and rebuilding
+                // from them is what made the list vanish after a listing (also with Test-Run,
+                // where nothing is sold at all).
+                if (!currencyPicker.IsVisible && _ownedCurrencies.Count > 0)
+                    return _currencyExchangeItemsCache;
 
                 // the game keeps the last search text in the picker, so after selling e.g. Abyss
                 // Thread the picker only lists that; a filtered list may only update the rows it
@@ -2769,8 +2785,17 @@ namespace SellMyShit
                         if (IsGameInputBusy())
                             break;
 
-                        var villageGold = currencyExchangePanel.GetChildAtIndex(15);
-                        var villageGoldPosition = villageGold.GetClientRect().Center;
+                        // any click outside the inputs commits the typed amounts. Use the window
+                        // title (a plain label far from the prices); the gold label next to the
+                        // button is only the fallback
+                        var blurTarget = currencyExchangePanel
+                            .GetChildAtIndex(1)?
+                            .GetChildAtIndex(1);
+
+                        if (blurTarget == null || blurTarget.GetClientRect().Width < 50)
+                            blurTarget = currencyExchangePanel.GetChildAtIndex(15);
+
+                        var villageGoldPosition = blurTarget.GetClientRect().Center;
 
                         if (QueueGameClick(villageGoldPosition))
                         {
