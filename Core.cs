@@ -2785,17 +2785,12 @@ namespace SellMyShit
                         if (IsGameInputBusy())
                             break;
 
-                        // any click outside the inputs commits the typed amounts. Use the window
-                        // title (a plain label far from the prices); the gold label next to the
-                        // button is only the fallback
-                        var blurTarget = currencyExchangePanel
-                            .GetChildAtIndex(1)?
-                            .GetChildAtIndex(1);
-
-                        if (blurTarget == null || blurTarget.GetClientRect().Width < 50)
-                            blurTarget = currencyExchangePanel.GetChildAtIndex(15);
-
-                        var villageGoldPosition = blurTarget.GetClientRect().Center;
+                        // Any click on a plain label inside the panel commits the typed amounts.
+                        // It must stay inside the panel: a click outside it (e.g. on the window
+                        // title, which sits above the panel) lands in the game world and moves
+                        // the character. The gold cost label is a safe, proven target.
+                        var villageGold = currencyExchangePanel.GetChildAtIndex(15);
+                        var villageGoldPosition = villageGold.GetClientRect().Center;
 
                         if (QueueGameClick(villageGoldPosition))
                         {
