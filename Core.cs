@@ -60,6 +60,7 @@ namespace SellMyShit
         private readonly List<string> _selectedCurrencies = new();
         private readonly List<OwnedCurrency> _bulkSellQueue = new();
 
+        private int _iHaveRetries;
         private bool _collectRunning;
         private DateTime _collectStartedUtc;
         private int _collectClicks;
@@ -657,7 +658,7 @@ namespace SellMyShit
                 _collectClicks++;
                 // the exchange rate-limits requests ("too many requests in a short time"),
                 // so collect slowly, with some jitter
-                _collectNextClickUtc = DateTime.UtcNow.AddMilliseconds(1800 + Random.Shared.Next(0, 700));
+                _collectNextClickUtc = DateTime.UtcNow.AddMilliseconds(1000 + Random.Shared.Next(0, 400));
 
                 LogMessage(
                     $"Collect: ctrl+shift+right-clicked slot " +
@@ -1832,6 +1833,7 @@ namespace SellMyShit
             switch (_sellSequenceStep)
             {
                 case SellSequenceStep.Start:
+                    _iHaveRetries = 0;
                     storedMousePosition = MouseInput.Mouse.GetCursorPosition();
                     AddDebugMessage($"Stored Mouse Position {storedMousePosition}");
                     {
@@ -1853,6 +1855,15 @@ namespace SellMyShit
                         {
                             SetSellSequenceStep(
                                 SellSequenceStep.WaitForOfferedCurrencyPicker);
+
+                            break;
+                        }
+
+                        // a click on an unfocused game window is swallowed by the focus change
+                        if (!GameController.Window.IsForeground())
+                        {
+                            WinApi.SetForegroundWindow(
+                                GameController.Window.Process.MainWindowHandle);
 
                             break;
                         }
@@ -1890,9 +1901,21 @@ namespace SellMyShit
                     {
                         if (isCurrencyPickerVisible)
                         {
+                            _iHaveRetries = 0;
+
                             SetSellSequenceStep(
                                 SellSequenceStep
                                     .ClickCurrencyPickerOfferedSearchInput);
+                        }
+                        else if (!IsGameInputBusy() &&
+                                 TimeInCurrentStep() > TimeSpan.FromMilliseconds(2000) &&
+                                 _iHaveRetries < 3)
+                        {
+                            // the click did not open the picker (e.g. the game window only took
+                            // focus after a long idle time), so click I have again
+                            _iHaveRetries++;
+                            AddDebugMessage($"I Have did not open the picker, retry {_iHaveRetries}.");
+                            SetSellSequenceStep(SellSequenceStep.ClickIHave);
                         }
 
                         break;
