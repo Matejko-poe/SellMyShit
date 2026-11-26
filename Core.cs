@@ -110,8 +110,9 @@ namespace SellMyShit
 
         private static readonly string[] Categories =
         [
-            CategoryAll, "Currency", "Essences", "Delve", "Divination Cards",
-            "Delirium", "Legion", "Fragments", "Other"
+            CategoryAll, "Currency", "Essences", "Delve", "Threads", "Divination Cards",
+            "Delirium", "Legion", "Fragments", "Oils", "Catalysts", "Omens", "Tattoos",
+            "Expedition", "Harvest", "Runecrafts", "Other"
         ];
 
         private string GetSelectedCategory()
@@ -132,6 +133,36 @@ namespace SellMyShit
 
             if (Has(className, "Divination") || Has(path, "DivinationCard"))
                 return "Divination Cards";
+
+            // these are told apart by their metadata path, which the dump of the picker rows
+            // showed to be reliable (the class is StackableCurrency for nearly all of them)
+            if (Has(path, "Items/Threads/"))
+                return "Threads";
+
+            if (Has(path, "Mushrune"))
+                return "Oils";
+
+            if (Has(path, "CurrencyJewelleryQuality"))
+                return "Catalysts";
+
+            if (Has(path, "AncestralOmen"))
+                return "Omens";
+
+            if (Has(path, "AncestralTattoo"))
+                return "Tattoos";
+
+            if (Has(path, "Runegraft"))
+                return "Runecrafts";
+
+            if (Has(name, "Lifeforce") || Has(name, "Life Force"))
+                return "Harvest";
+
+            if (Has(path, "Expedition") && !Has(path, "Astrolabe") ||
+                Has(name, "Artifact") ||
+                Has(name, "Coinage"))
+            {
+                return "Expedition";
+            }
 
             if (Has(name, "Essence") || Has(path, "CurrencyEssence"))
                 return "Essences";
@@ -701,6 +732,14 @@ namespace SellMyShit
                 return;
             }
 
+            // with a full inventory the click moves nothing, so stop instead of clicking on
+            if (IsInventoryFull())
+            {
+                LogMessage($"Collect: inventory is full, stopped after {_collectClicks} click(s).");
+                _collectRunning = false;
+                return;
+            }
+
             if (key == _collectLastKey)
             {
                 if (++_collectSameKeyClicks > 3)
@@ -733,6 +772,56 @@ namespace SellMyShit
 
         // A completed row has two slots, "Buying" and "Selling", each with its amount drawn on it
         // (rows sit in two columns on the board). A slot whose amount reads 0 is already empty.
+        // true when the 12x5 main inventory has no free cell left; an unreadable inventory counts
+        // as not full, a click into a really full one just does nothing
+        private bool IsInventoryFull()
+        {
+            const int gridWidth = 12;
+            const int gridHeight = 5;
+
+            try
+            {
+                var items = GameController?.IngameState?.ServerData?
+                    .PlayerInventories?[0]?.Inventory?.InventorySlotItems;
+
+                if (items == null)
+                    return false;
+
+                var used = new bool[gridWidth, gridHeight];
+
+                foreach (var item in items)
+                {
+                    if (item == null || item.Address == 0)
+                        continue;
+
+                    // a half-written entry while items move in must not throw
+                    if (item.PosX < 0 || item.PosY < 0 ||
+                        item.SizeX <= 0 || item.SizeY <= 0 ||
+                        item.PosX + item.SizeX > gridWidth ||
+                        item.PosY + item.SizeY > gridHeight)
+                    {
+                        continue;
+                    }
+
+                    for (var x = item.PosX; x < item.PosX + item.SizeX; x++)
+                    for (var y = item.PosY; y < item.PosY + item.SizeY; y++)
+                        used[x, y] = true;
+                }
+
+                foreach (var cell in used)
+                {
+                    if (!cell)
+                        return false;
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static Element FindNextCollectTarget(
             CurrencyExchangePanel currencyExchangePanel,
             out string key)
