@@ -364,6 +364,8 @@ namespace SellMyShit
                     };
                 }
 
+                LogPickerDiagnostics(options.Count, seen, isFiltered, currencyPicker.IsVisible);
+
                 // a closed picker lists nothing; keep what we have instead of wiping the list
                 if (seen.Count == 0)
                     return _currencyExchangeItemsCache;
@@ -406,6 +408,50 @@ namespace SellMyShit
                     $"SellMyShit error while extracting items: {ex}");
 
                 return _currencyExchangeItemsCache;
+            }
+        }
+
+        private string _lastPickerSummary = string.Empty;
+        private readonly HashSet<string> _loggedPickerNames = new(StringComparer.OrdinalIgnoreCase);
+
+        // Why is a currency missing from the list? This logs, once per change, how many rows the
+        // picker has versus how many carry an owned count (undrawn rows read 0), and once per
+        // name every row whose category falls back to "Other" or whose type was not resolved.
+        private void LogPickerDiagnostics(
+            int optionCount,
+            Dictionary<string, OwnedCurrency> seen,
+            bool isFiltered,
+            bool pickerVisible)
+        {
+            if (!pickerVisible)
+                return;
+
+            var owned = seen.Values.Count(currency => currency.Owned > 0);
+            var summary = $"{optionCount}/{seen.Count}/{owned}/{isFiltered}";
+
+            if (summary != _lastPickerSummary)
+            {
+                _lastPickerSummary = summary;
+
+                LogMessage(
+                    $"Picker: {optionCount} options, {seen.Count} named rows, " +
+                    $"{owned} with owned > 0 (filtered: {isFiltered}).");
+            }
+
+            foreach (var currency in seen.Values)
+            {
+                var category = GetItemCategory(currency);
+
+                if (category != "Other" && currency.ItemType != null)
+                    continue;
+
+                if (_loggedPickerNames.Add(currency.Name))
+                {
+                    LogMessage(
+                        $"Picker row '{currency.Name}': category {category}, " +
+                        $"class '{currency.ItemType?.ClassName}', " +
+                        $"path '{currency.ItemType?.Metadata}', owned {currency.Owned}.");
+                }
             }
         }
 
@@ -1099,6 +1145,24 @@ namespace SellMyShit
 
             Flow(ImGui.CalcTextSize("Divination Cards").X + comboExtra);
             DrawCategoryPicker();
+
+            if (Settings.UseReverseMarketRatio)
+            {
+                Flow(110);
+                ImGui.SetNextItemWidth(110);
+
+                var bonus = Settings.ReverseBonusPercent.Value;
+
+                if (ImGui.DragFloat("##ReverseBonus", ref bonus, 0.1f, 0f, 100f, "bonus +%.1f%%"))
+                    Settings.ReverseBonusPercent.Value = Math.Clamp(bonus, 0f, 100f);
+
+                if (ImGui.IsItemHovered())
+                {
+                    ImGui.SetTooltip(
+                        "Extra percent asked above the reverse ratio (best buyer's price).\n" +
+                        "0 = exactly the reverse ratio; it never goes below it.");
+                }
+            }
 
             DrawUnloadedStashTabsWarning();
 
@@ -2838,7 +2902,7 @@ namespace SellMyShit
                                     ownedAmount,
                                     _pendingMarketRatio.MarketGetRate,
                                     _pendingMarketRatio.MarketGiveRate,
-                                    Settings.UseReverseMarketRatio ? 100 : Settings.ListingPricePercent.Value);
+                                    GetEffectivePricePercent());
 
                         if (wantedValue <= 0)
                         {
@@ -3578,9 +3642,7 @@ namespace SellMyShit
                 return false;
             }
 
-            var pricePercent = Settings.UseReverseMarketRatio
-                ? 100
-                : Settings.ListingPricePercent.Value;
+            var pricePercent = GetEffectivePricePercent();
 
             // wanted currency per offered item
             var rate =
@@ -3603,11 +3665,18 @@ namespace SellMyShit
             return true;
         }
 
+        // percent of the market price to ask: the reverse ratio plus the bonus (never below 100),
+        // or the configured listing percent when reverse pricing is off
+        private double GetEffectivePricePercent() =>
+            Settings.UseReverseMarketRatio
+                ? 100d + Math.Max(0d, Settings.ReverseBonusPercent.Value)
+                : Settings.ListingPricePercent.Value;
+
         private static int CalculateWantedAmount(
             int offeredAmount,
             float marketRateGet,
             float marketRateGive,
-            int listingPricePercent)
+            double listingPricePercent)
         {
             if (offeredAmount <= 0 ||
                 marketRateGet <= 0 ||
