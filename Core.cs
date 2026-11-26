@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -436,6 +437,24 @@ namespace SellMyShit
                 LogMessage(
                     $"Picker: {optionCount} options, {seen.Count} named rows, " +
                     $"{owned} with owned > 0 (filtered: {isFiltered}).");
+
+                // every row with its category, for finding out why a currency is missing
+                if (!isFiltered)
+                {
+                    try
+                    {
+                        File.WriteAllLines(
+                            Path.Combine(DirectoryFullName, "picker_rows.txt"),
+                            seen.Values.Select(currency =>
+                                $"{currency.Name} | {GetItemCategory(currency)} | " +
+                                $"{currency.ItemType?.ClassName} | {currency.ItemType?.Metadata} | " +
+                                $"owned {currency.Owned}"));
+                    }
+                    catch
+                    {
+                        // diagnostics only
+                    }
+                }
             }
 
             foreach (var currency in seen.Values)
@@ -1148,19 +1167,35 @@ namespace SellMyShit
 
             if (Settings.UseReverseMarketRatio)
             {
-                Flow(110);
-                ImGui.SetNextItemWidth(110);
+                const int BonusStep = 2;
 
-                var bonus = Settings.ReverseBonusPercent.Value;
+                Flow(
+                    ButtonWidth("-") + ButtonWidth("+") +
+                    ImGui.CalcTextSize("Bonus +100%").X +
+                    style.ItemSpacing.X * 2);
 
-                if (ImGui.DragFloat("##ReverseBonus", ref bonus, 0.1f, 0f, 100f, "bonus +%.1f%%"))
-                    Settings.ReverseBonusPercent.Value = Math.Clamp(bonus, 0f, 100f);
+                if (ImGui.SmallButton("-##BonusMinus"))
+                {
+                    Settings.ReverseBonusPercent.Value =
+                        Math.Max(0, Settings.ReverseBonusPercent.Value - BonusStep);
+                }
+
+                ImGui.SameLine();
+                ImGui.TextUnformatted($"Bonus +{Settings.ReverseBonusPercent.Value}%");
 
                 if (ImGui.IsItemHovered())
                 {
                     ImGui.SetTooltip(
                         "Extra percent asked above the reverse ratio (best buyer's price).\n" +
                         "0 = exactly the reverse ratio; it never goes below it.");
+                }
+
+                ImGui.SameLine();
+
+                if (ImGui.SmallButton("+##BonusPlus"))
+                {
+                    Settings.ReverseBonusPercent.Value =
+                        Math.Min(100, Settings.ReverseBonusPercent.Value + BonusStep);
                 }
             }
 

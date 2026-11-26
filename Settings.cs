@@ -248,8 +248,8 @@ namespace SellMyShit
             "Extra percent asked on top of the reverse ratio (the best buyer's price). 0 lists exactly at the reverse ratio; it can never go below it. A higher price may take longer to sell.",
             207,
             PricingGroupId)]
-        public RangeNode<float> ReverseBonusPercent { get; set; } =
-            new(0f, 0f, 100f);
+        public RangeNode<int> ReverseBonusPercent { get; set; } =
+            new(0, 0, 100);
 
         [Menu("Reopen \"I have\" list after a sale?",
             "Off (default): after listing, the plugin stays on the exchange board and removes the sold amount from its list itself. On: it clicks \"I have\" again to refresh the owned counts from the game, which leaves the item picker open.",
