@@ -31,6 +31,10 @@ namespace SellMyShit
     {
         public string Name { get; init; } = string.Empty;
         public int Owned { get; set; }
+
+        // the picker shows big stacks abbreviated ("17.2K"), so the real amount is only known
+        // to about 100
+        public bool OwnedApproximate { get; set; }
         public BaseItemType ItemType { get; set; }
     }
 
@@ -112,7 +116,7 @@ namespace SellMyShit
         [
             CategoryAll, "Currency", "Essences", "Delve", "Threads", "Divination Cards",
             "Delirium", "Legion", "Fragments", "Oils", "Catalysts", "Omens", "Tattoos",
-            "Expedition", "Harvest", "Runecrafts", "Other"
+            "Expedition", "Harvest", "Runegrafts", "Other"
         ];
 
         private string GetSelectedCategory()
@@ -152,7 +156,7 @@ namespace SellMyShit
                 return "Tattoos";
 
             if (Has(path, "Runegraft"))
-                return "Runecrafts";
+                return "Runegrafts";
 
             if (Has(name, "Lifeforce") || Has(name, "Life Force"))
                 return "Harvest";
@@ -388,10 +392,13 @@ namespace SellMyShit
                         continue;
                     }
 
+                    var owned = ReadOwned(option, out var approximate);
+
                     seen[name] = new OwnedCurrency
                     {
                         Name = name,
-                        Owned = option.Owned,
+                        Owned = owned,
+                        OwnedApproximate = approximate,
                         ItemType = ResolveBaseItemType(option)
                     };
                 }
@@ -444,6 +451,58 @@ namespace SellMyShit
         }
 
         private ItemIcons _itemIcons;
+        // ExileCore reads the owned count as 0 when the game abbreviates it ("17.2K"), which hid
+        // every big stack. The raw text sits in the icon element of the row, so read that
+        // ourselves when the parsed count is 0.
+        private static int ReadOwned(
+            CurrencyExchangeCurrencyPickerCurrencyOption option,
+            out bool approximate)
+        {
+            approximate = false;
+
+            if (option.Owned > 0)
+                return option.Owned;
+
+            var text = option
+                .GetChildAtIndex(1)?
+                .GetChildAtIndex(0)?
+                .Text?
+                .Trim();
+
+            if (string.IsNullOrEmpty(text))
+                return 0;
+
+            var multiplier = 1d;
+            var last = char.ToUpperInvariant(text[^1]);
+
+            if (last is 'K' or 'M')
+            {
+                multiplier = last == 'K' ? 1_000d : 1_000_000d;
+                text = text[..^1].Trim().Replace(',', '.');
+                approximate = true;
+            }
+            else
+            {
+                // plain numbers may carry thousands separators (spaces, commas)
+                text = new string(text.Where(char.IsDigit).ToArray());
+            }
+
+            if (!double.TryParse(
+                    text,
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out var number) ||
+                number <= 0)
+            {
+                approximate = false;
+                return 0;
+            }
+
+            // the game cuts the stack down ("17259" shows as "17.2K", not "17.3K"), so the shown
+            // value is never more than what is there
+            return (int)Math.Min(int.MaxValue, Math.Floor(number * multiplier));
+        }
+
         private string _lastPickerSummary = string.Empty;
         private readonly HashSet<string> _loggedPickerNames = new(StringComparer.OrdinalIgnoreCase);
 
@@ -1848,8 +1907,16 @@ namespace SellMyShit
             ImGui.TableNextColumn();
 
             ImGui.TextUnformatted(
+                (item.OwnedApproximate ? "~" : string.Empty) +
                 item.Owned.ToString(
                     CultureInfo.InvariantCulture));
+
+            if (item.OwnedApproximate && ImGui.IsItemHovered())
+            {
+                ImGui.SetTooltip(
+                    "The game shows this stack abbreviated (e.g. 17.2K), so the amount is\n" +
+                    "approximate and rounded down; a little may stay behind after selling.");
+            }
 
             ImGui.TableNextColumn();
 
