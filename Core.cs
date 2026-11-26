@@ -3763,6 +3763,18 @@ namespace SellMyShit
                 });
         }
 
+        private bool IsExchangePanelOpen()
+        {
+            try
+            {
+                return GetCurrencyExchangePanel()?.IsVisible == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private bool QueueGameInput(
             int overlayHideMilliseconds,
             int releaseDelayMilliseconds,
@@ -3804,6 +3816,14 @@ namespace SellMyShit
             {
                 try
                 {
+                    // never click into the game world: the exchange must still be open
+                    if (!IsExchangePanelOpen())
+                    {
+                        AddDebugMessage("Input skipped: currency exchange is not open.");
+                        _collectRunning = false;
+                        return;
+                    }
+
                     inputAction(gameWindowHandle);
                 }
                 catch (Exception ex)
