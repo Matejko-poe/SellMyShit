@@ -251,6 +251,12 @@ namespace SellMyShit
         public RangeNode<int> ReverseBonusPercent { get; set; } =
             new(0, 0, 100);
 
+        [Menu("Show item icons",
+            "Shows the item icon in the tooltip of the owned items list. Icons are downloaded once from the game's image server (the paths come from the Ninja Price data) and kept in the icons folder of the plugin.",
+            208,
+            PricingGroupId)]
+        public ToggleNode ShowItemIcons { get; set; } = new(true);
+
         [Menu("Reopen \"I have\" list after a sale?",
             "Off (default): after listing, the plugin stays on the exchange board and removes the sold amount from its list itself. On: it clicks \"I have\" again to refresh the owned counts from the game, which leaves the item picker open.",
             206,

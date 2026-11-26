@@ -443,6 +443,7 @@ namespace SellMyShit
             }
         }
 
+        private ItemIcons _itemIcons;
         private string _lastPickerSummary = string.Empty;
         private readonly HashSet<string> _loggedPickerNames = new(StringComparer.OrdinalIgnoreCase);
 
@@ -1813,9 +1814,26 @@ namespace SellMyShit
 
             if (ImGui.IsItemHovered())
             {
-                // handy to check how an item was categorised
-                ImGui.SetTooltip(
+                // the icon (when enabled and already downloaded), and handy to check how the
+                // item was categorised
+                ImGui.BeginTooltip();
+
+                if (Settings.ShowItemIcons.Value)
+                {
+                    _itemIcons ??= new ItemIcons(Graphics, DirectoryFullName);
+
+                    if (_itemIcons.TryGetTexture(name, out var iconTexture))
+                    {
+                        ImGui.Image(
+                            new ImTextureRef { TexID = (ImTextureID)(nint)iconTexture },
+                            new NumVector2(64, 64));
+                    }
+                }
+
+                ImGui.TextUnformatted(
                     $"Category: {GetItemCategory(item)}\nClass: {item.ItemType?.ClassName}");
+
+                ImGui.EndTooltip();
             }
 
             ImGui.TableNextColumn();
