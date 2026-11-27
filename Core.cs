@@ -1326,17 +1326,17 @@ namespace SellMyShit
                 if (ImGui.SmallButton("-##BonusMinus"))
                 {
                     Settings.ReverseBonusPercent.Value =
-                        Math.Max(0, Settings.ReverseBonusPercent.Value - BonusStep);
+                        Math.Max(-50, Settings.ReverseBonusPercent.Value - BonusStep);
                 }
 
                 ImGui.SameLine();
-                ImGui.TextUnformatted($"Bonus +{Settings.ReverseBonusPercent.Value}%");
+                ImGui.TextUnformatted($"Bonus {Settings.ReverseBonusPercent.Value:+0;-0;0}%");
 
                 if (ImGui.IsItemHovered())
                 {
                     ImGui.SetTooltip(
-                        "Extra percent asked above the reverse ratio (best buyer's price).\n" +
-                        "0 = exactly the reverse ratio; it never goes below it.");
+                        "Percent asked above (+) or below (-) the reverse ratio (best buyer's price).\n" +
+                        "0 = exactly the reverse ratio.");
                 }
 
                 ImGui.SameLine();
@@ -3552,9 +3552,35 @@ namespace SellMyShit
                 });
         }
 
+        // a click must land inside the exchange window, never on the game world behind it
+        private bool IsInsideExchangePanel(Vector2 windowPosition)
+        {
+            try
+            {
+                var rect = GetCurrencyExchangePanel()?.GetClientRect();
+
+                if (rect == null || rect.Value.Width <= 0 || rect.Value.Height <= 0)
+                    return false;
+
+                if (rect.Value.Contains(windowPosition))
+                    return true;
+
+                AddDebugMessage(
+                    $"Click skipped: ({windowPosition.X:0},{windowPosition.Y:0}) is outside the exchange window.");
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private bool QueueGameClick(
             Vector2 screenPosition)
         {
+            if (!IsInsideExchangePanel(screenPosition))
+                return false;
+
             // element rects are relative to the game window; the cursor needs screen coordinates
             var targetPosition = ToScreenPosition(screenPosition);
 
@@ -3591,6 +3617,9 @@ namespace SellMyShit
         private bool QueueGameCtrlShiftRightClick(
             Vector2 screenPosition)
         {
+            if (!IsInsideExchangePanel(screenPosition))
+                return false;
+
             // element rects are relative to the game window; the cursor needs screen coordinates
             var targetPosition = ToScreenPosition(screenPosition);
 
@@ -3898,7 +3927,7 @@ namespace SellMyShit
         // or the configured listing percent when reverse pricing is off
         private double GetEffectivePricePercent() =>
             Settings.UseReverseMarketRatio
-                ? 100d + Math.Max(0d, Settings.ReverseBonusPercent.Value)
+                ? Math.Max(1d, 100d + Settings.ReverseBonusPercent.Value)
                 : Settings.ListingPricePercent.Value;
 
         private static int CalculateWantedAmount(

@@ -245,11 +245,11 @@ namespace SellMyShit
             new(90, 1, 99);
 
         [Menu("Reverse price bonus",
-            "Extra percent asked on top of the reverse ratio (the best buyer's price). 0 lists exactly at the reverse ratio; it can never go below it. A higher price may take longer to sell.",
+            "Extra percent asked on top of the reverse ratio (the best buyer's price). 0 lists exactly at the reverse ratio; negative values go below it (down to -50). A higher price may take longer to sell.",
             207,
             PricingGroupId)]
         public RangeNode<int> ReverseBonusPercent { get; set; } =
-            new(0, 0, 100);
+            new(0, -50, 100);
 
         [Menu("Show item icons",
             "Shows the item icon in the tooltip of the owned items list. Icons are downloaded once from the game's image server (the paths come from the Ninja Price data) and kept in the icons folder of the plugin.",
